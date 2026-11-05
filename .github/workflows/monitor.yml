@@ -23,8 +23,8 @@ jobs:
 
       - name: Ejecutar script
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          bot_telegram: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          id_chat: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python main.py
 
       - name: Guardar estado actualizado
