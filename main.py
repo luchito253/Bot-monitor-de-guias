@@ -85,26 +85,19 @@ def verificar_cambios():
     estado_actual = info_guia["estado"]
     detalle_actual = info_guia["detalle"]
 
-    ultimo_estado = None
-    if os.path.exists(ARCHIVO_ESTADO):
-        with open(ARCHIVO_ESTADO, "r", encoding="utf-8") as f:
-            datos = json.load(f)
-            ultimo_estado = datos.get("estado")
-
-    if estado_actual != ultimo_estado:
-        mensaje = (
-            f"🚚 *Actualización de Guía Coordinadora*\n\n"
-            f"📋 *Guía:* `{NUMERO_GUIA}`\n"
-            f"📌 *Nuevo Estado:* *{estado_actual}*\n"
-            f"📝 *Detalle:* {detalle_actual}"
-        )
-        enviar_mensaje_telegram(mensaje)
-        
-        with open(ARCHIVO_ESTADO, "w", encoding="utf-8") as f:
-            json.dump({"estado": estado_actual, "detalle": detalle_actual}, f, ensure_ascii=False, indent=2)
-        print(f"Estado actualizado con éxito: {estado_actual}")
-    else:
-        print("Sin novedades en la guía.")
+    # FORZAMOS EL MENSAJE PARA LA PRUEBA (sin comparar si cambió)
+    mensaje = (
+        f"🚚 *Prueba de Guía Coordinadora*\n\n"
+        f"📋 *Guía:* `{NUMERO_GUIA}`\n"
+        f"📌 *Estado:* *{estado_actual}*\n"
+        f"📝 *Detalle:* {detalle_actual}"
+    )
+    enviar_mensaje_telegram(mensaje)
+    
+    # Guardamos siempre para forzar la creación del archivo en GitHub
+    with open(ARCHIVO_ESTADO, "w", encoding="utf-8") as f:
+        json.dump({"estado": estado_actual, "detalle": detalle_actual}, f, ensure_ascii=False, indent=2)
+    print(f"Mensaje enviado a Telegram. Estado actual: {estado_actual}")
 
 if __name__ == "__main__":
     verificar_cambios()
