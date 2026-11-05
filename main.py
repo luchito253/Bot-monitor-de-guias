@@ -1,50 +1,65 @@
 import requests
+from bs4 import BeautifulSoup
 import json
 import os
 
-# Lee automáticamente de GitHub Secrets o del entorno local
 TELEGRAM_BOT_TOKEN = os.getenv("9253803566:AAHqNxUJHpnRW0Wl2tkZJmeOI6nsJ5uChIo")
 TELEGRAM_CHAT_ID = os.getenv("193021750")
 NUMERO_GUIA = "78390170386"
 ARCHIVO_ESTADO = "estado_guia.json"
 
 def obtener_estado_coordinadora(guia):
-    url = "https://coordinadora.com/cm-api/v1/rastreo/guia"
-    payload = {"guia": str(guia)}
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Accept": "application/json, text/html, */*"
     }
-
+    
+    # 1. Intentar vía API directa de rastreo
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=15)
-        if response.status_code == 200:
-            data = response.json()
-            if "data" in data and "pasos" in data["data"]:
-                pasos = data["data"]["pasos"]
-                if pasos:
-                    ultimo_paso = pasos[-1]
-                    estado = ultimo_paso.get("nombre", "Estado no identificado")
-                    fecha = ultimo_paso.get("fecha", "")
-                    ubicacion = ultimo_paso.get("ciudad", "")
-                    return {
-                        "estado": estado,
-                        "detalle": f"{estado} ({ubicacion}) - {fecha}".strip()
-                    }
+        url_api = f"https://coordinadora.com/cm-api/v1/rastreo/guia"
+        payload = {"guia": str(guia)}
+        res = requests.post(url_api, json=payload, headers=headers, timeout=12)
+        
+        if res.status_code == 200:
+            data = res.json()
+            # Si responde con la estructura de pasos
+            pasos = data.get("data", {}).get("pasos", [])
+            if pasos:
+                ultimo = pasos[-1]
+                estado = ultimo.get("nombre") or ultimo.get("descripcion") or "En Proceso"
+                fecha = ultimo.get("fecha", "")
+                ciudad = ultimo.get("ciudad", "")
+                return {
+                    "estado": estado,
+                    "detalle": f"{estado} ({ciudad}) - {fecha}".strip()
+                }
             
-            estado_general = data.get("data", {}).get("estado_guia")
-            if estado_general:
-                return {"estado": estado_general, "detalle": estado_general}
-
-        return None
+            # Si responde con estado principal
+            estado_gen = data.get("data", {}).get("estado_guia") or data.get("data", {}).get("estado")
+            if estado_gen:
+                return {"estado": estado_gen, "detalle": estado_gen}
     except Exception as e:
-        print(f"Error al consultar la guía en Coordinadora: {e}")
-        return None
+        print(f"Petición API falló: {e}")
+
+    # 2. Respaldo mediante Scraping Web si la API interna restringe el acceso
+    try:
+        url_web = f"https://coordinadora.com/rastreo/rastreo-de-guia/detalle-de-rastreo-de-guia/?guia={guia}"
+        res_web = requests.get(url_web, headers=headers, timeout=12)
+        if res_web.status_code == 200:
+            soup = BeautifulSoup(res_web.text, "html.parser")
+            # Buscar elementos comunes de estado en la página
+            estado_element = soup.find(class_="estado") or soup.find("h3") or soup.find(class_="step-active")
+            if estado_element:
+                texto_estado = estado_element.text.strip()
+                return {"estado": texto_estado, "detalle": texto_estado}
+    except Exception as e:
+        print(f"Petición HTML falló: {e}")
+
+    return None
 
 def enviar_mensaje_telegram(mensaje):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Error: No se encontraron TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID.")
+        print("Error: No se encontraron los Secretos de Telegram en GitHub.")
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -54,9 +69,11 @@ def enviar_mensaje_telegram(mensaje):
         "parse_mode": "Markdown"
     }
     try:
-        requests.post(url, json=payload, timeout=10)
+        r = requests.post(url, json=payload, timeout=10)
+        if r.status_code != 200:
+            print(f"Respuesta Telegram Error {r.status_code}: {r.text}")
     except Exception as e:
-        print(f"Error al enviar mensaje a Telegram: {e}")
+        print(f"Error enviando a Telegram: {e}")
 
 def verificar_cambios():
     info_guia = obtener_estado_coordinadora(NUMERO_GUIA)
@@ -85,9 +102,9 @@ def verificar_cambios():
         
         with open(ARCHIVO_ESTADO, "w", encoding="utf-8") as f:
             json.dump({"estado": estado_actual, "detalle": detalle_actual}, f, ensure_ascii=False, indent=2)
-        print(f"Cambio detectado. Estado actualizado a: {estado_actual}")
+        print(f"Estado actualizado con éxito: {estado_actual}")
     else:
-        print("Sin novedades. La guía sigue en el mismo estado.")
+        print("Sin novedades en la guía.")
 
 if __name__ == "__main__":
     verificar_cambios()
