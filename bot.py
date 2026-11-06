@@ -13,29 +13,36 @@ def enviar_mensaje_telegram(mensaje):
     print(f"[Telegram] Mensaje enviado.")
 
 def consultar_coordinadora(guia):
-    target_url = f"https://coordinadora.com/rastreo/rastreo-de-guia/?guia={guia}"
+    # Usamos tu nueva ruta directa
+    target_url = f"https://coordinadora.com/rastreo/rastreo-de-guia/detalle-de-rastreo-de-guia/?guia={guia}"
+    
     payload = {
         'api_key': SCRAPERAPI_KEY,
         'url': target_url,
         'render': 'true', 
-        'country_code': 'co'
+        'country_code': 'co',
+        'premium': 'true',
+        'wait': '15000' # Le damos 15 segundos para que cargue el texto real
     }
-    print("  -> Conectando a Coordinadora vía ScraperAPI...")
+    print("  -> Conectando a la URL directa de Coordinadora...")
     try:
         response = requests.get('http://api.scraperapi.com/', params=payload, timeout=90)
-        print(f"  -> Código HTTP ScraperAPI: {response.status_code}")
-        
         soup = BeautifulSoup(response.text, 'html.parser')
-        texto_limpio = soup.get_text(separator=" | ", strip=True)
-        print(f"  -> TEXTO PANTALLA: {texto_limpio[:400]}")
         
-        # Buscamos posibles estados en el texto renderizado
-        estados = ["Entregado", "En reparto", "En terminal", "Recogido", "En tránsito", "Novedad"]
-        for est in estados:
-            if est.lower() in texto_limpio.lower():
-                return est
+        texto_limpio = soup.get_text(separator=" | ", strip=True)
+        
+        # Buscamos la frase exacta que antecede al estado
+        if "Estado de la guía:" in texto_limpio:
+            partes = texto_limpio.split("Estado de la guía:")
+            estado_bruto = partes[1].split("|")[0].strip()
+            estado_final = estado_bruto.replace("Destino:", "").strip()
+            
+            if estado_final:
+                return estado_final
                 
-        return "Estado actualizado (revisa el log de texto)"
+        print(f"  -> TEXTO PANTALLA INCOMPLETO: {texto_limpio[:200]}")
+        return None
+        
     except Exception as e:
         print(f"  -> Error: {e}")
     return None
