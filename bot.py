@@ -18,33 +18,28 @@ def consultar_coordinadora(guia):
         'api_key': SCRAPERAPI_KEY,
         'url': target_url,
         'render': 'true', 
-        'country_code': 'co',
-        'premium': 'true',
-        'wait': '20000', # Aumentamos la espera a 20 segundos
-        'device_type': 'desktop' # Forzamos la vista de computador
+        'country_code': 'co'
     }
-    print("  -> Conectando a Coordinadora vía ScraperAPI (esperando 20s)...")
+    print("  -> Conectando a Coordinadora vía ScraperAPI...")
     try:
         response = requests.get('http://api.scraperapi.com/', params=payload, timeout=90)
+        print(f"  -> Código HTTP ScraperAPI: {response.status_code}")
+        
         soup = BeautifulSoup(response.text, 'html.parser')
-        
         texto_limpio = soup.get_text(separator=" | ", strip=True)
+        print(f"  -> TEXTO PANTALLA: {texto_limpio[:400]}")
         
-        if "Estado de la guía:" in texto_limpio:
-            partes = texto_limpio.split("Estado de la guía:")
-            estado_bruto = partes[1].split("|")[0].strip()
-            estado_final = estado_bruto.replace("Destino:", "").strip()
-            
-            if estado_final:
-                return estado_final
+        # Buscamos posibles estados en el texto renderizado
+        estados = ["Entregado", "En reparto", "En terminal", "Recogido", "En tránsito", "Novedad"]
+        for est in estados:
+            if est.lower() in texto_limpio.lower():
+                return est
                 
-        print(f"  -> AÚN SIN RESULTADOS, TEXTO: {texto_limpio[:200]}")
-        return None
-        
+        return "Estado actualizado (revisa el log de texto)"
     except Exception as e:
         print(f"  -> Error: {e}")
     return None
-    
+
 def consultar_servientrega(guia):
     url = f"https://www.servientrega.com/wps/portal/Colombia/transacciones-personas/rastreo-envios/detalle?guia={guia}"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
