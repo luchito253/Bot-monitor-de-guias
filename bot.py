@@ -14,7 +14,7 @@ def enviar_mensaje_telegram(mensaje):
 
 def consultar_coordinadora(guia):
     # Usamos tu nueva ruta directa
-    target_url = f"https://coordinadora.com/rastreo/rastreo-de-guia/detalle-de-rastreo-de-guia/?guia={guia}"
+    target_url = f"https://coordinadora.com/wp-json/rgc/v1/detail_tracking?remission_code=78390170386={guia}"
     
     payload = {
         'api_key': SCRAPERAPI_KEY,
