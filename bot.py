@@ -19,31 +19,25 @@ def consultar_coordinadora(guia):
         'url': target_url,
         'render': 'true', 
         'country_code': 'co',
-        'premium': 'true'
+        'premium': 'true',
+        'wait': '5000' # Espera 5 segundos adicionales a que cargue el contenido dinámico
     }
-    print("  -> Conectando a Coordinadora vía ScraperAPI...")
+    print("  -> Conectando a Coordinadora vía ScraperAPI (con espera)...")
     try:
         response = requests.get('http://api.scraperapi.com/', params=payload, timeout=90)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Extraemos todo el texto separándolo con barras " | "
         texto_limpio = soup.get_text(separator=" | ", strip=True)
         
-        # Buscamos la frase exacta que muestra la página web
         if "Estado de la guía:" in texto_limpio:
             partes = texto_limpio.split("Estado de la guía:")
-            # El estado estará inmediatamente después, tomamos el texto hasta la siguiente barra " | "
             estado_bruto = partes[1].split("|")[0].strip()
-            
-            # Limpiamos palabras adicionales por si el texto se pegó a la siguiente sección
             estado_final = estado_bruto.replace("Destino:", "").strip()
             
             if estado_final:
                 return estado_final
                 
-        # Si no encuentra el estado, imprimimos en el log para diagnosticar y retornamos None
-        # Retornar None evita que el bot envíe mensajes falsos o guarde errores en el archivo JSON
-        print(f"  -> TEXTO PANTALLA INCOMPLETO: {texto_limpio[:200]}")
+        print(f"  -> AÚN SIN RESULTADOS, TEXTO: {texto_limpio[:200]}")
         return None
         
     except Exception as e:
