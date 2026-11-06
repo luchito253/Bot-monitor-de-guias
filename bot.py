@@ -62,7 +62,7 @@ def main():
                 
                 try:
                     print("  -> Abriendo página de Coordinadora...")
-                    page.goto(f"https://coordinadora.com/rastreo/tracking/?guia={guia}", timeout=30000)
+                    page.goto(f"https://coordinadora.com/rastreo/rastreo-de-guia/?guia={guia}", timeout=30000)
                     print(f"  -> Título de la página: {page.title()}")
                     print("  -> Esperando 8 segundos...")
                     page.wait_for_timeout(8000) 
