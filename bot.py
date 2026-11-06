@@ -1,9 +1,10 @@
 import json
 import requests
-from playwright.sync_api import sync_playwright
+from bs4 import BeautifulSoup
 
 TELEGRAM_TOKEN = "9253803566:AAHqNxUJHpnRW0Wl2tkZJmeOI6nsJ5uChIo"
 CHAT_ID = "193021750"
+SCRAPERAPI_KEY = "cb35454830fc0ca5951258af8e2ae8ac"
 
 def enviar_mensaje_telegram(mensaje):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -11,117 +12,80 @@ def enviar_mensaje_telegram(mensaje):
     requests.post(url, json=payload)
     print(f"[Telegram] Mensaje enviado.")
 
-def main():
-    print("Iniciando bot con Navegador Simulado y Anti-Detección...")
-    
-    with open('guias.json', 'r') as f:
-        guias = json.load(f)
-
+def consultar_coordinadora(guia):
+    target_url = f"https://coordinadora.com/rastreo/rastreo-de-guia/?guia={guia}"
+    payload = {
+        'api_key': SCRAPERAPI_KEY,
+        'url': target_url,
+        'render': 'true', 
+        'country_code': 'co'
+    }
+    print("  -> Conectando a Coordinadora vía ScraperAPI...")
     try:
-        with open('estado_guias.json', 'r') as f:
-            estados_previos = json.load(f)
-    except FileNotFoundError:
-        estados_previos = {}
+        response = requests.get('http://api.scraperapi.com/', params=payload, timeout=90)
+        print(f"  -> Código HTTP ScraperAPI: {response.status_code}")
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        texto_limpio = soup.get_text(separator=" | ", strip=True)
+        print(f"  -> TEXTO PANTALLA: {texto_limpio[:400]}")
+        
+        # Buscamos posibles estados en el texto renderizado
+        estados = ["Entregado", "En reparto", "En terminal", "Recogido", "En tránsito", "Novedad"]
+        for est in estados:
+            if est.lower() in texto_limpio.lower():
+                return est
+                
+        return "Estado actualizado (revisa el log de texto)"
+    except Exception as e:
+        print(f"  -> Error: {e}")
+    return None
+
+def consultar_servientrega(guia):
+    url = f"https://www.servientrega.com/wps/portal/Colombia/transacciones-personas/rastreo-envios/detalle?guia={guia}"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    print("  -> Conectando a Servientrega...")
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        estado_div = soup.find('div', class_='estado-guia')
+        if estado_div:
+            return estado_div.text.strip()
+    except Exception as e:
+        print(f"  -> Error consultando Servientrega: {e}")
+    return None
+
+def main():
+    print("Iniciando bot con ScraperAPI...")
+    with open('guias.json', 'r') as f: guias = json.load(f)
+    try:
+        with open('estado_guias.json', 'r') as f: estados_previos = json.load(f)
+    except: estados_previos = {}
 
     cambios_detectados = False
 
-    with sync_playwright() as p:
-        # Banderas para ocultar que somos un bot automático
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled"]
-        )
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={"width": 1280, "height": 720}
-        )
-        page = context.new_page()
+    for guia, transportadora in guias.items():
+        print(f"\n[*] Revisando: {guia} ({transportadora})")
+        estado_actual = None
+        
+        if transportadora.lower() == 'coordinadora':
+            estado_actual = consultar_coordinadora(guia)
+        elif transportadora.lower() == 'servientrega':
+            estado_actual = consultar_servientrega(guia)
+            
+        if not estado_actual: continue
+        
+        estado_previo = estados_previos.get(guia)
+        print(f"[+] Actual: {estado_actual} | [-] Previo: {estado_previo}")
 
-        for guia, transportadora in guias.items():
-            print(f"\n[*] Revisando guía: {guia} ({transportadora})")
-            estado_actual = None
-
-            if transportadora.lower() == 'coordinadora':
-                datos_capturados = {"estado": None}
-                
-                # Función espía mejorada
-                def interceptar_respuesta(response):
-                    if "detail_tracking" in response.url:
-                        print(f"    [API] Petición interceptada. Código HTTP: {response.status}")
-                        try:
-                            datos = response.json()
-                            print(f"    [API] JSON: {str(datos)[:200]}")
-                            if "data" in datos and "estado" in datos["data"]:
-                                datos_capturados["estado"] = datos["data"]["estado"]
-                            elif "estado_actual" in datos:
-                                datos_capturados["estado"] = datos["estado_actual"]
-                        except:
-                            print("    [API] Error leyendo la respuesta.")
-
-                page.on("response", interceptar_respuesta)
-                
-                try:
-                    print("  -> Abriendo página de Coordinadora...")
-                    page.goto(f"https://coordinadora.com/rastreo/rastreo-de-guia/?guia={guia}", timeout=30000)
-                    print(f"  -> Título de la página: {page.title()}")
-                    print("  -> Esperando 8 segundos...")
-                    page.wait_for_timeout(8000) 
-                    
-                    estado_actual = datos_capturados["estado"]
-                    
-                    # Si no atrapó la respuesta, leeremos lo que dice la pantalla para diagnosticar
-                    if not estado_actual:
-                        print("  -> La API interna no respondió. Leyendo la pantalla del navegador...")
-                        texto_pantalla = page.locator("body").inner_text()
-                        print(f"  -> TEXTO VISIBLE: {texto_pantalla[:400].replace(chr(10), ' | ')}")
-                        
-                except Exception as e:
-                    print(f"  -> Error cargando la página: {e}")
-                
-                page.remove_listener("response", interceptar_respuesta)
-
-            elif transportadora.lower() == 'servientrega':
-                try:
-                    print("  -> Abriendo página de Servientrega...")
-                    page.goto(f"https://www.servientrega.com/wps/portal/Colombia/transacciones-personas/rastreo-envios/detalle?guia={guia}", timeout=30000)
-                    print(f"  -> Título de la página: {page.title()}")
-                    page.wait_for_timeout(6000)
-                    
-                    elemento = page.query_selector('.estado-guia')
-                    if elemento:
-                        estado_actual = elemento.inner_text().strip()
-                    else:
-                        print("  -> No se encontró el recuadro. Leyendo pantalla...")
-                        texto_pantalla = page.locator("body").inner_text()
-                        print(f"  -> TEXTO VISIBLE: {texto_pantalla[:400].replace(chr(10), ' | ')}")
-                except Exception as e:
-                     print(f"  -> Error con Servientrega: {e}")
-
-            if not estado_actual:
-                print(f"[!] No se pudo extraer el estado de {guia}. Se omitirá.")
-                continue
-
-            print(f"[+] Estado extraído: {estado_actual}")
-            estado_previo = estados_previos.get(guia)
-            print(f"[-] Estado anterior guardado: {estado_previo}")
-
-            if estado_actual != estado_previo:
-                print("[!] ¡HAY UN CAMBIO! Preparando envío a Telegram...")
-                mensaje = f"📦 *Actualización de Envío*\n\n*Transportadora:* {transportadora.capitalize()}\n*Guía:* `{guia}`\n*Nuevo Estado:* {estado_actual}"
-                enviar_mensaje_telegram(mensaje)
-                
-                estados_previos[guia] = estado_actual
-                cambios_detectados = True
-            else:
-                print("[=] El estado no ha cambiado.")
-
-        browser.close()
+        if estado_actual != estado_previo:
+            print("[!] Cambio detectado. Enviando a Telegram...")
+            mensaje = f"📦 *Actualización*\n\n*Transportadora:* {transportadora.capitalize()}\n*Guía:* `{guia}`\n*Estado:* {estado_actual}"
+            enviar_mensaje_telegram(mensaje)
+            estados_previos[guia] = estado_actual
+            cambios_detectados = True
 
     if cambios_detectados:
-        print("\nGuardando nuevos estados en el archivo...")
-        with open('estado_guias.json', 'w') as f:
-            json.dump(estados_previos, f, indent=4)
-    print("Proceso finalizado.")
+        with open('estado_guias.json', 'w') as f: json.dump(estados_previos, f, indent=4)
 
 if __name__ == "__main__":
     main()
