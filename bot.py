@@ -12,17 +12,31 @@ def enviar_mensaje_telegram(mensaje):
     print(f"[Telegram] Mensaje enviado. Respuesta: {respuesta.status_code}")
 
 def consultar_coordinadora(guia):
-    url = f"https://coordinadora.com/wp-json/rgc/v1/detail_tracking?remission_code={guia}"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    print(f"  -> Conectando a Coordinadora...")
+    # Usamos la URL pública de la página web, no la de la API
+    url = f"https://coordinadora.com/rastreo/tracking/?guia={guia}"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36',
+        'Accept-Language': 'es-ES,es;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+    }
+    print(f"  -> Conectando a la web de Coordinadora...")
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        print(f"  -> Código HTTP: {response.status_code}")
+        response = requests.get(url, headers=headers, timeout=15)
+        print(f"  -> Código HTTP web: {response.status_code}")
         if response.status_code == 200:
-            datos = response.json()
-            return datos.get("estado_actual", "Estado desconocido")
+            soup = BeautifulSoup(response.text, 'html.parser')
+            # Buscamos elementos comunes donde Coordinadora pone el estado en el HTML
+            # Esto puede variar, buscaremos clases típicas
+            estado_element = soup.find('div', class_=lambda c: c and 'estado' in c.lower())
+            if estado_element:
+                estado_texto = estado_element.text.strip()
+                print(f"  -> Texto extraído del HTML: {estado_texto}")
+                return estado_texto
+            else:
+                print("  -> No se encontró una etiqueta con clase 'estado' en el HTML público.")
+                return "Estado desconocido (HTML)"
     except Exception as e:
-        print(f"  -> Error consultando Coordinadora: {e}")
+        print(f"  -> Error consultando web Coordinadora: {e}")
     return None
 
 def consultar_servientrega(guia):
