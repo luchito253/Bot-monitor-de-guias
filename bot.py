@@ -12,7 +12,7 @@ def enviar_mensaje_telegram(mensaje):
     print(f"[Telegram] Mensaje enviado.")
 
 def main():
-    print("Iniciando bot de rastreo con Navegador Simulado (Playwright)...")
+    print("Iniciando bot con Navegador Simulado y Anti-Detección...")
     
     with open('guias.json', 'r') as f:
         guias = json.load(f)
@@ -25,11 +25,15 @@ def main():
 
     cambios_detectados = False
 
-    # Iniciamos el navegador invisible
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        # Banderas para ocultar que somos un bot automático
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"]
+        )
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 720}
         )
         page = context.new_page()
 
@@ -40,25 +44,37 @@ def main():
             if transportadora.lower() == 'coordinadora':
                 datos_capturados = {"estado": None}
                 
-                # Esta función "espía" la respuesta de la página cuando consulta la base de datos
+                # Función espía mejorada
                 def interceptar_respuesta(response):
-                    if "detail_tracking" in response.url and response.status == 200:
+                    if "detail_tracking" in response.url:
+                        print(f"    [API] Petición interceptada. Código HTTP: {response.status}")
                         try:
                             datos = response.json()
+                            print(f"    [API] JSON: {str(datos)[:200]}")
                             if "data" in datos and "estado" in datos["data"]:
                                 datos_capturados["estado"] = datos["data"]["estado"]
+                            elif "estado_actual" in datos:
+                                datos_capturados["estado"] = datos["estado_actual"]
                         except:
-                            pass
+                            print("    [API] Error leyendo la respuesta.")
 
                 page.on("response", interceptar_respuesta)
                 
                 try:
-                    print("  -> Abriendo navegador en Coordinadora...")
+                    print("  -> Abriendo página de Coordinadora...")
                     page.goto(f"https://coordinadora.com/rastreo/tracking/?guia={guia}", timeout=30000)
-                    print("  -> Esperando 8 segundos para que carguen los datos...")
+                    print(f"  -> Título de la página: {page.title()}")
+                    print("  -> Esperando 8 segundos...")
                     page.wait_for_timeout(8000) 
                     
                     estado_actual = datos_capturados["estado"]
+                    
+                    # Si no atrapó la respuesta, leeremos lo que dice la pantalla para diagnosticar
+                    if not estado_actual:
+                        print("  -> La API interna no respondió. Leyendo la pantalla del navegador...")
+                        texto_pantalla = page.locator("body").inner_text()
+                        print(f"  -> TEXTO VISIBLE: {texto_pantalla[:400].replace(chr(10), ' | ')}")
+                        
                 except Exception as e:
                     print(f"  -> Error cargando la página: {e}")
                 
@@ -66,15 +82,18 @@ def main():
 
             elif transportadora.lower() == 'servientrega':
                 try:
-                    print("  -> Abriendo navegador en Servientrega...")
+                    print("  -> Abriendo página de Servientrega...")
                     page.goto(f"https://www.servientrega.com/wps/portal/Colombia/transacciones-personas/rastreo-envios/detalle?guia={guia}", timeout=30000)
+                    print(f"  -> Título de la página: {page.title()}")
                     page.wait_for_timeout(6000)
                     
                     elemento = page.query_selector('.estado-guia')
                     if elemento:
                         estado_actual = elemento.inner_text().strip()
                     else:
-                        print("  -> No se encontró el estado. Es posible que la guía no exista o cambió el diseño.")
+                        print("  -> No se encontró el recuadro. Leyendo pantalla...")
+                        texto_pantalla = page.locator("body").inner_text()
+                        print(f"  -> TEXTO VISIBLE: {texto_pantalla[:400].replace(chr(10), ' | ')}")
                 except Exception as e:
                      print(f"  -> Error con Servientrega: {e}")
 
