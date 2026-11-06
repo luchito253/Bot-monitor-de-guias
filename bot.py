@@ -12,7 +12,7 @@ def enviar_mensaje_telegram(mensaje):
     print(f"[Telegram] Mensaje enviado. Respuesta: {respuesta.status_code}")
 
 def consultar_coordinadora(guia):
-    url = f"https://api.coordinadora.com/cm-control-estado-guias/api/v1/guias/{guia}"
+    url = f"https://coordinadora.com/wp-json/rgc/v1/detail_tracking?remission_code={guia}"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     print(f"  -> Conectando a Coordinadora...")
     try:
