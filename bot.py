@@ -18,28 +18,38 @@ def consultar_coordinadora(guia):
         'api_key': SCRAPERAPI_KEY,
         'url': target_url,
         'render': 'true', 
-        'country_code': 'co'
+        'country_code': 'co',
+        'premium': 'true'
     }
     print("  -> Conectando a Coordinadora vía ScraperAPI...")
     try:
         response = requests.get('http://api.scraperapi.com/', params=payload, timeout=90)
-        print(f"  -> Código HTTP ScraperAPI: {response.status_code}")
-        
         soup = BeautifulSoup(response.text, 'html.parser')
-        texto_limpio = soup.get_text(separator=" | ", strip=True)
-        print(f"  -> TEXTO PANTALLA: {texto_limpio[:400]}")
         
-        # Buscamos posibles estados en el texto renderizado
-        estados = ["Entregado", "En reparto", "En terminal", "Recogido", "En tránsito", "Novedad"]
-        for est in estados:
-            if est.lower() in texto_limpio.lower():
-                return est
+        # Extraemos todo el texto separándolo con barras " | "
+        texto_limpio = soup.get_text(separator=" | ", strip=True)
+        
+        # Buscamos la frase exacta que muestra la página web
+        if "Estado de la guía:" in texto_limpio:
+            partes = texto_limpio.split("Estado de la guía:")
+            # El estado estará inmediatamente después, tomamos el texto hasta la siguiente barra " | "
+            estado_bruto = partes[1].split("|")[0].strip()
+            
+            # Limpiamos palabras adicionales por si el texto se pegó a la siguiente sección
+            estado_final = estado_bruto.replace("Destino:", "").strip()
+            
+            if estado_final:
+                return estado_final
                 
-        return "Estado actualizado (revisa el log de texto)"
+        # Si no encuentra el estado, imprimimos en el log para diagnosticar y retornamos None
+        # Retornar None evita que el bot envíe mensajes falsos o guarde errores en el archivo JSON
+        print(f"  -> TEXTO PANTALLA INCOMPLETO: {texto_limpio[:200]}")
+        return None
+        
     except Exception as e:
         print(f"  -> Error: {e}")
     return None
-
+    
 def consultar_servientrega(guia):
     url = f"https://www.servientrega.com/wps/portal/Colombia/transacciones-personas/rastreo-envios/detalle?guia={guia}"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
