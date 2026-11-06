@@ -2,7 +2,7 @@ name: Bot de Rastreo de Guías
 
 on:
   schedule:
-    - cron: '0 */2 * * *'
+    - cron: '0 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -21,7 +21,9 @@ jobs:
           python-version: '3.11'
 
       - name: Instalar dependencias
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium
 
       - name: Ejecutar script de rastreo
         run: python bot.py
