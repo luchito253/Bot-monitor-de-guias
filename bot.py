@@ -20,9 +20,10 @@ def consultar_coordinadora(guia):
         'render': 'true', 
         'country_code': 'co',
         'premium': 'true',
-        'wait': '5000' # Espera 5 segundos adicionales a que cargue el contenido dinámico
+        'wait': '20000', # Aumentamos la espera a 20 segundos
+        'device_type': 'desktop' # Forzamos la vista de computador
     }
-    print("  -> Conectando a Coordinadora vía ScraperAPI (con espera)...")
+    print("  -> Conectando a Coordinadora vía ScraperAPI (esperando 20s)...")
     try:
         response = requests.get('http://api.scraperapi.com/', params=payload, timeout=90)
         soup = BeautifulSoup(response.text, 'html.parser')
