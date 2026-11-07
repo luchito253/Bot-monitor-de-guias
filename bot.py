@@ -26,7 +26,6 @@ def main():
     cambios_detectados = False
 
     with sync_playwright() as p:
-        # Lanzamos el navegador en GitHub normalmente (sin proxies, no los necesitamos aquí)
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(viewport={"width": 1280, "height": 720})
         page = context.new_page()
@@ -35,24 +34,19 @@ def main():
             print(f"\n[*] Revisando guía: {guia} ({transportadora})")
             estado_actual = None
 
-          if transportadora.lower() == 'coordinadora':
+            if transportadora.lower() == 'coordinadora':
                 try:
                     print("  -> Usando ParcelsApp para evadir el reCAPTCHA...")
                     page.goto(f"https://parcelsapp.com/es/tracking/{guia}", timeout=60000)
                     print("  -> Esperando 25 segundos a que el agregador obtenga los datos...")
                     
-                    # Le damos 25 segundos para asegurar que ParcelsApp haga su magia
                     page.wait_for_timeout(25000)
                     
                     texto_pantalla = page.locator("body").inner_text()
                     
-                    # En lugar de buscar palabras fijas, vamos a capturar e imprimir un bloque de texto 
-                    # para ver qué palabras exactas está usando ParcelsApp para tu guía
-                    if "Coordinadora" in texto_pantalla or "Entregado" in texto_pantalla or "tránsito" in texto_pantalla:
+                    # Buscamos palabras clave generales para atrapar el bloque de texto
+                    if "Coordinadora" in texto_pantalla or "Entregado" in texto_pantalla or "tránsito" in texto_pantalla or "terminal" in texto_pantalla:
                         print(f"\n--- LO QUE VIO EL BOT EN PARCELSAPP ---\n{texto_pantalla[:400]}\n---------------------------------------\n")
-                        
-                        # Guardamos el texto temporalmente como estado para forzar a que te llegue a Telegram
-                        # y puedas ver qué dice directamente en tu celular
                         estado_actual = "Estado detectado (revisa el log de Actions)" 
                     else:
                         print(f"  -> TEXTO SIN RESULTADOS: {texto_pantalla[:200]}")
