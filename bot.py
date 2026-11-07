@@ -13,7 +13,7 @@ def enviar_mensaje_telegram(mensaje):
     print(f"[Telegram] Mensaje enviado.")
 
 def main():
-    print("Iniciando bot con Playwright + Proxy Colombiano...")
+    print("Iniciando bot Optimizado (Sin imágenes/CSS) + Proxy...")
     
     with open('guias.json', 'r') as f:
         guias = json.load(f)
@@ -27,7 +27,6 @@ def main():
     cambios_detectados = False
 
     with sync_playwright() as p:
-        # Aquí inyectamos el proxy al navegador invisible
         browser = p.chromium.launch(
             headless=True,
             proxy={"server": PROXY_COLOMBIA}
@@ -35,15 +34,26 @@ def main():
         context = browser.new_context(viewport={"width": 1280, "height": 720})
         page = context.new_page()
 
+        # --- MAGIA DE OPTIMIZACIÓN ---
+        # Bloqueamos imágenes, estilos, fuentes y videos para que el proxy no colapse
+        def bloquear_recursos_pesados(route):
+            if route.request.resource_type in ["image", "stylesheet", "font", "media"]:
+                route.abort()
+            else:
+                route.continue_()
+        
+        page.route("**/*", bloquear_recursos_pesados)
+        # -----------------------------
+
         for guia, transportadora in guias.items():
             print(f"\n[*] Revisando guía: {guia} ({transportadora})")
             estado_actual = None
 
             if transportadora.lower() == 'coordinadora':
                 try:
-                    # Usamos la ventana lateral directa
-                    page.goto(f"https://coordinadora.com/rastreo/rastreo-de-guia/detalle-de-rastreo-de-guia/?guia={guia}", timeout=60000)
-                    print("  -> Página cargada. Esperando 10 segundos a que JavaScript procese los datos...")
+                    # wait_until="domcontentloaded" hace que no espere a que cargue todo, solo el código base y scripts
+                    page.goto(f"https://coordinadora.com/rastreo/rastreo-de-guia/detalle-de-rastreo-de-guia/?guia={guia}", timeout=60000, wait_until="domcontentloaded")
+                    print("  -> Código cargado. Esperando 10s al JavaScript...")
                     page.wait_for_timeout(10000)
                     
                     texto_pantalla = page.locator("body").inner_text()
@@ -59,8 +69,7 @@ def main():
 
             elif transportadora.lower() == 'servientrega':
                 try:
-                    # Servientrega no suele necesitar proxy, pero aprovechará la conexión
-                    page.goto(f"https://www.servientrega.com/wps/portal/Colombia/transacciones-personas/rastreo-envios/detalle?guia={guia}", timeout=60000)
+                    page.goto(f"https://www.servientrega.com/wps/portal/Colombia/transacciones-personas/rastreo-envios/detalle?guia={guia}", timeout=60000, wait_until="domcontentloaded")
                     page.wait_for_timeout(8000)
                     elemento = page.query_selector('.estado-guia')
                     if elemento:
