@@ -35,30 +35,27 @@ def main():
             print(f"\n[*] Revisando guía: {guia} ({transportadora})")
             estado_actual = None
 
-            if transportadora.lower() == 'coordinadora':
+          if transportadora.lower() == 'coordinadora':
                 try:
-                    print("  -> Usando ParcelsApp para evadir el reCAPTCHA de Coordinadora...")
-                    # Entramos al agregador internacional que ya resolvió el bloqueo
+                    print("  -> Usando ParcelsApp para evadir el reCAPTCHA...")
                     page.goto(f"https://parcelsapp.com/es/tracking/{guia}", timeout=60000)
-                    print("  -> Esperando 12 segundos a que el agregador obtenga los datos...")
+                    print("  -> Esperando 25 segundos a que el agregador obtenga los datos...")
                     
-                    # ParcelsApp hace la búsqueda automáticamente al cargar la URL
-                    page.wait_for_timeout(12000)
+                    # Le damos 25 segundos para asegurar que ParcelsApp haga su magia
+                    page.wait_for_timeout(25000)
                     
-                    # Leemos toda la pantalla renderizada
                     texto_pantalla = page.locator("body").inner_text()
                     
-                    # Lista de palabras clave basadas en los estados de Coordinadora
-                    estados = ["En terminal destino", "En reparto", "Entregado", "Recogido", "En tránsito", "Novedad", "Despachado"]
-                    
-                    # Buscamos si alguno de los estados aparece en la respuesta del agregador
-                    for est in estados:
-                        if est.lower() in texto_pantalla.lower():
-                            estado_actual = est
-                            break
-                            
-                    if not estado_actual:
-                        print("  -> No se detectó un estado claro en la pantalla del agregador.")
+                    # En lugar de buscar palabras fijas, vamos a capturar e imprimir un bloque de texto 
+                    # para ver qué palabras exactas está usando ParcelsApp para tu guía
+                    if "Coordinadora" in texto_pantalla or "Entregado" in texto_pantalla or "tránsito" in texto_pantalla:
+                        print(f"\n--- LO QUE VIO EL BOT EN PARCELSAPP ---\n{texto_pantalla[:400]}\n---------------------------------------\n")
+                        
+                        # Guardamos el texto temporalmente como estado para forzar a que te llegue a Telegram
+                        # y puedas ver qué dice directamente en tu celular
+                        estado_actual = "Estado detectado (revisa el log de Actions)" 
+                    else:
+                        print(f"  -> TEXTO SIN RESULTADOS: {texto_pantalla[:200]}")
                         
                 except Exception as e:
                     print(f"  -> Error con ParcelsApp: {e}")
