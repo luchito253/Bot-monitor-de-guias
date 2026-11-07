@@ -4,7 +4,6 @@ from playwright.sync_api import sync_playwright
 
 TELEGRAM_TOKEN = "9253803566:AAHqNxUJHpnRW0Wl2tkZJmeOI6nsJ5uChIo"
 CHAT_ID = "193021750"
-PROXY_COLOMBIA = "http://190.71.72.85:2525"
 
 def enviar_mensaje_telegram(mensaje):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -13,7 +12,7 @@ def enviar_mensaje_telegram(mensaje):
     print(f"[Telegram] Mensaje enviado.")
 
 def main():
-    print("Iniciando bot Optimizado (Sin imágenes/CSS) + Proxy...")
+    print("Iniciando bot (Estrategia de Agregador Global)...")
     
     with open('guias.json', 'r') as f:
         guias = json.load(f)
@@ -27,23 +26,10 @@ def main():
     cambios_detectados = False
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            proxy={"server": PROXY_COLOMBIA}
-        )
+        # Lanzamos el navegador en GitHub normalmente (sin proxies, no los necesitamos aquí)
+        browser = p.chromium.launch(headless=True)
         context = browser.new_context(viewport={"width": 1280, "height": 720})
         page = context.new_page()
-
-        # --- MAGIA DE OPTIMIZACIÓN ---
-        # Bloqueamos imágenes, estilos, fuentes y videos para que el proxy no colapse
-        def bloquear_recursos_pesados(route):
-            if route.request.resource_type in ["image", "stylesheet", "font", "media"]:
-                route.abort()
-            else:
-                route.continue_()
-        
-        page.route("**/*", bloquear_recursos_pesados)
-        # -----------------------------
 
         for guia, transportadora in guias.items():
             print(f"\n[*] Revisando guía: {guia} ({transportadora})")
@@ -51,29 +37,37 @@ def main():
 
             if transportadora.lower() == 'coordinadora':
                 try:
-                    # wait_until="domcontentloaded" hace que no espere a que cargue todo, solo el código base y scripts
-                    page.goto(f"https://coordinadora.com/rastreo/rastreo-de-guia/detalle-de-rastreo-de-guia/?guia={guia}", timeout=60000, wait_until="domcontentloaded")
-                    print("  -> Código cargado. Esperando 10s al JavaScript...")
-                    page.wait_for_timeout(10000)
+                    print("  -> Usando ParcelsApp para evadir el reCAPTCHA de Coordinadora...")
+                    # Entramos al agregador internacional que ya resolvió el bloqueo
+                    page.goto(f"https://parcelsapp.com/es/tracking/{guia}", timeout=60000)
+                    print("  -> Esperando 12 segundos a que el agregador obtenga los datos...")
                     
+                    # ParcelsApp hace la búsqueda automáticamente al cargar la URL
+                    page.wait_for_timeout(12000)
+                    
+                    # Leemos toda la pantalla renderizada
                     texto_pantalla = page.locator("body").inner_text()
                     
-                    if "Estado de la guía:" in texto_pantalla:
-                        partes = texto_pantalla.split("Estado de la guía:")
-                        estado_bruto = partes[1].split("\n")[0].strip()
-                        estado_actual = estado_bruto.replace("Destino:", "").strip()
-                    else:
-                        print(f"  -> TEXTO INCOMPLETO: {texto_pantalla[:150]}")
+                    # Lista de palabras clave basadas en los estados de Coordinadora
+                    estados = ["En terminal destino", "En reparto", "Entregado", "Recogido", "En tránsito", "Novedad", "Despachado"]
+                    
+                    # Buscamos si alguno de los estados aparece en la respuesta del agregador
+                    for est in estados:
+                        if est.lower() in texto_pantalla.lower():
+                            estado_actual = est
+                            break
+                            
+                    if not estado_actual:
+                        print("  -> No se detectó un estado claro en la pantalla del agregador.")
+                        
                 except Exception as e:
-                    print(f"  -> Error Coordinadora: {e}")
+                    print(f"  -> Error con ParcelsApp: {e}")
 
             elif transportadora.lower() == 'servientrega':
                 try:
-                    page.goto(f"https://www.servientrega.com/wps/portal/Colombia/transacciones-personas/rastreo-envios/detalle?guia={guia}", timeout=60000, wait_until="domcontentloaded")
-                    page.wait_for_timeout(8000)
-                    elemento = page.query_selector('.estado-guia')
-                    if elemento:
-                        estado_actual = elemento.inner_text().strip()
+                    page.goto(f"https://www.servientrega.com/wps/portal/Colombia/transacciones-personas/rastreo-envios/detalle?guia={guia}", timeout=60000)
+                    page.wait_for_selector('.estado-guia', timeout=15000)
+                    estado_actual = page.locator('.estado-guia').inner_text().strip()
                 except Exception as e:
                      print(f"  -> Error Servientrega: {e}")
 
@@ -82,7 +76,7 @@ def main():
                 estado_previo = estados_previos.get(guia)
 
                 if estado_actual != estado_previo:
-                    print("[!] CAMBIO DETECTADO. Enviando mensaje...")
+                    print("[!] CAMBIO DETECTADO. Enviando mensaje a Telegram...")
                     mensaje = f"📦 *Actualización de Envío*\n\n*Transportadora:* {transportadora.capitalize()}\n*Guía:* `{guia}`\n*Estado:* {estado_actual}"
                     enviar_mensaje_telegram(mensaje)
                     estados_previos[guia] = estado_actual
@@ -97,7 +91,7 @@ def main():
     if cambios_detectados:
         with open('estado_guias.json', 'w') as f:
             json.dump(estados_previos, f, indent=4)
-    print("Proceso finalizado.")
+    print("\nProceso finalizado.")
 
 if __name__ == "__main__":
     main()
